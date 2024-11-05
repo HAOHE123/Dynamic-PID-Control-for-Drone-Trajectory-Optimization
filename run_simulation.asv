@@ -1,0 +1,131 @@
+% MATLAB script to load data, run Simulink model, and plot results.
+
+% Clear workspace and close figures
+clear; close all; clc;
+
+%% Load Data
+% Load GMM data
+GMMData = load('GMM_Model.mat');
+
+% Load discrete optimization data
+discreteData = load('discrete_data.mat');
+
+% Load continuous optimization data
+continuousData = load('continuous_data.mat');
+
+%% Prepare Time Vectors
+% Discrete methods
+numStepsDiscrete = size(discreteData.x_HD, 2);
+tDiscrete = (0:numStepsDiscrete-1)'; % Assuming unit time steps
+
+% Continuous methods
+t_span = 5; % Time defined in python
+numStepsContinuous = size(continuousData.x_HC, 2);
+tStep = t_span/numStepsContinuous; % Time step used in your simulations
+tContinuous = (0:tStep:tStep*(numStepsContinuous-1))';
+
+%% Prepare Trajectory Data
+% Discrete methods
+x_HD_discrete = discreteData.x_HD';
+x_TD_discrete = discreteData.x_TD';
+
+% Continuous methods
+x_HC_continuous = continuousData.x_HC';
+x_TC_continuous = continuousData.x_TC';
+
+% Optimal point
+x0_mean = discreteData.x0_mean';
+
+%% Create Timeseries Objects for Simulink Inputs
+% Discrete Heavy-Ball method
+ts_x_HD = timeseries(x_HD_discrete, tDiscrete);
+
+% Discrete Triple Momentum method
+ts_x_TD = timeseries(x_TD_discrete, tDiscrete);
+
+% Continuous Heavy-Ball method
+ts_x_HC = timeseries(x_HC_continuous, tContinuous);
+
+% Continuous Triple Momentum method
+ts_x_TC = timeseries(x_TC_continuous, tContinuous);
+
+%% Load Simulink Model
+% Replace 'DroneTrajectoryModel' with the actual name of your Simulink model
+model = 'DroneTrajectoryModel';
+load_system(model);
+
+%% Configure Simulation Inputs
+% Assuming your Simulink model has Inport blocks for input trajectories
+% and is configured to accept external inputs.
+
+% For example, set up SimulationInput objects for each method
+% Discrete Heavy-Ball method
+simIn_HD = Simulink.SimulationInput(model);
+simIn_HD = simIn_HD.setExternalInput(ts_x_HD);
+
+% Discrete Triple Momentum method
+simIn_TD = Simulink.SimulationInput(model);
+simIn_TD = simIn_TD.setExternalInput(ts_x_TD);
+
+% Continuous Heavy-Ball method
+simIn_HC = Simulink.SimulationInput(model);
+simIn_HC = simIn_HC.setExternalInput(ts_x_HC);
+
+% Continuous Triple Momentum method
+simIn_TC = Simulink.SimulationInput(model);
+simIn_TC = simIn_TC.setExternalInput(ts_x_TC);
+
+%% Run Simulations
+% Run simulations for each method
+simOut_HD = sim(simIn_HD);
+simOut_TD = sim(simIn_TD);
+simOut_HC = sim(simIn_HC);
+simOut_TC = sim(simIn_TC);
+
+%% Collect Outputs
+% Assuming your Simulink model logs the output position as 'position'
+% Adjust the signal name as per your model configuration
+
+% For Discrete Heavy-Ball method
+position_HD = simOut_HD.logsout.get('position').Values;
+time_HD = position_HD.Time;
+data_HD = position_HD.Data;
+
+% For Discrete Triple Momentum method
+position_TD = simOut_TD.logsout.get('position').Values;
+time_TD = position_TD.Time;
+data_TD = position_TD.Data;
+
+% For Continuous Heavy-Ball method
+position_HC = simOut_HC.logsout.get('position').Values;
+time_HC = position_HC.Time;
+data_HC = position_HC.Data;
+
+% For Continuous Triple Momentum method
+position_TC = simOut_TC.logsout.get('position').Values;
+time_TC = position_TC.Time;
+data_TC = position_TC.Data;
+
+%% Plot Results
+% Plot the trajectories from the simulations
+figure;
+hold on;
+plot(data_HD(:,1), data_HD(:,2), 'b-', 'LineWidth', 1.5);
+plot(data_TD(:,1), data_TD(:,2), 'r-', 'LineWidth', 1.5);
+plot(data_HC(:,1), data_HC(:,2), 'g--', 'LineWidth', 1.5);
+plot(data_TC(:,1), data_TC(:,2), 'k--', 'LineWidth', 1.5);
+plot(x0_mean(1), x0_mean(2), 'ko', 'MarkerSize', 8, 'MarkerFaceColor', 'y');
+legend('Discrete Heavy-Ball', 'Discrete Triple Momentum', 'Continuous Heavy-Ball', 'Continuous Triple Momentum', 'Optimal Point');
+xlabel('X-axis');
+ylabel('Y-axis');
+title('Drone Trajectories from Simulink Simulations');
+grid on;
+set(gca, 'FontSize', 12);
+hold off;
+
+% Save the figure
+exportgraphics(gcf, 'DroneTrajectories_Simulink.png', 'Resolution', 300);
+
+%% Close the Simulink model
+close_system(model, 0); % The 0 means don't save changes
+
